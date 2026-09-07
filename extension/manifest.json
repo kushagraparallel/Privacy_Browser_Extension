@@ -25,7 +25,7 @@
     {
       "matches": ["<all_urls>"],
       "js": [
-        "libs/ort.all.min.js",
+        "node_modules/onnxruntime-web/dist/ort.all.min.js",
         "utils.js",
         "privacy-filter.js",
         "vision-processor.js",
@@ -39,9 +39,9 @@
   "web_accessible_resources": [
     {
       "resources": [
-        "libs/*.js",
-        "libs/*.wasm",
-        "models/*"
+      "node_modules/onnxruntime-web/dist/*.js",
+      "node_modules/onnxruntime-web/dist/*.wasm",
+      "models/*"
       ],
       "matches": ["<all_urls>"]
     }

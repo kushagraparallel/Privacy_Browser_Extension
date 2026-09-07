@@ -10,13 +10,16 @@ class PrivacyBrowserAgent {
         this.commandExecutor = new CommandExecutor();
         this.serverComm = null;
         this.config = null;
-        
+
         this.isActive = false;
         this.processingInterval = null;
         this.lastProcessingTime = 0;
         this.perf = new PerformanceMonitor();
 
-        Logger.log('AGENT', 'Privacy Browser Agent content script initialized');
+        Logger.log(
+            'AGENT',
+            'Privacy Browser Agent content script initialized'
+        );
     }
 
     /**
@@ -24,19 +27,42 @@ class PrivacyBrowserAgent {
      */
     async initialize() {
         try {
-            Logger.log('AGENT', 'Initializing Privacy Browser Agent...');
+            Logger.log(
+                'AGENT',
+                'Initializing Privacy Browser Agent...'
+            );
 
             // Load configuration
             this.config = await Config.load();
-            Logger.log('AGENT', 'Configuration loaded', this.config);
+            this.config.SERVER_URL = "http://localhost:8000"; // Replace 8000 with your local port
+            console.log(
+                'LOADED CONFIG:',
+                JSON.stringify(this.config, null, 2)
+            );
+
+            Logger.log(
+                'AGENT',
+                'Configuration loaded',
+                this.config
+            );
 
             // Initialize server communication
-            this.serverComm = new ServerComm(this.config.SERVER_URL);
+            this.serverComm = new ServerComm(
+                this.config.SERVER_URL || 'http://localhost:8000'
+            );
 
             // Initialize vision processor
-            const visionReady = await this.visionProcessor.initialize();
-            if (!visionReady && this.config.ENABLE_LOCAL_VISION) {
-                Logger.warn('AGENT', 'Vision processor initialization failed, continuing without local vision');
+            const visionReady =
+                await this.visionProcessor.initialize();
+
+            if (
+                !visionReady &&
+                this.config.ENABLE_LOCAL_VISION
+            ) {
+                Logger.warn(
+                    'AGENT',
+                    'Vision processor initialization failed, continuing without local vision'
+                );
             }
 
             // Set up message listeners
@@ -46,15 +72,33 @@ class PrivacyBrowserAgent {
             this.setupMutationObserver();
 
             // Notify background script that content script is ready
-            chrome.runtime.sendMessage({
-                type: 'content_ready',
-                url: window.location.href
-            }).catch(err => Logger.warn('AGENT', 'Failed to send ready message', err));
+            chrome.runtime
+                .sendMessage({
+                    type: 'content_ready',
+                    url: window.location.href
+                })
+                .catch((err) => {
+                    Logger.warn(
+                        'AGENT',
+                        'Failed to send ready message',
+                        err
+                    );
+                });
 
-            Logger.log('AGENT', 'Initialization complete');
+            Logger.log(
+                'AGENT',
+                'Initialization complete'
+            );
+
             return true;
+
         } catch (error) {
-            Logger.error('AGENT', 'Initialization failed', error);
+            Logger.error(
+                'AGENT',
+                'Initialization failed',
+                error
+            );
+
             return false;
         }
     }
@@ -64,28 +108,51 @@ class PrivacyBrowserAgent {
      */
     startProcessing() {
         if (this.isActive) {
-            Logger.warn('AGENT', 'Processing already active');
+            Logger.warn(
+                'AGENT',
+                'Processing already active'
+            );
             return;
         }
 
-        Logger.log('AGENT', 'Starting continuous screen processing');
+        if (!this.config) {
+            Logger.error(
+                'AGENT',
+                'Cannot start processing: configuration is not loaded'
+            );
+            return;
+        }
+
+        const processingInterval =
+            this.config?.PERFORMANCE?.processingInterval || 5000;
+
+        Logger.log(
+            'AGENT',
+            `Starting continuous screen processing with interval: ${processingInterval}ms`
+        );
+
         this.isActive = true;
 
         this.processingInterval = setInterval(() => {
             this.processScreenCycle();
-        }, this.config.PERFORMANCE.processingInterval);
+        }, processingInterval);
 
-        // Also process immediately
+        // Process immediately
         this.processScreenCycle();
     }
-
     /**
      * Stop continuous screen processing
      */
     stopProcessing() {
-        if (!this.isActive) return;
+        if (!this.isActive) {
+            return;
+        }
 
-        Logger.log('AGENT', 'Stopping screen processing');
+        Logger.log(
+            'AGENT',
+            'Stopping screen processing'
+        );
+
         this.isActive = false;
 
         if (this.processingInterval) {
@@ -98,56 +165,242 @@ class PrivacyBrowserAgent {
      * Single screen processing cycle
      */
     async processScreenCycle() {
+
+        // --------------------------------------------------
+        // Make sure configuration is available
+        // --------------------------------------------------
+
+        if (!this.config) {
+            Logger.error(
+                'AGENT',
+                'Cannot process screen: configuration is not loaded'
+            );
+
+            return;
+        }
+
+        const processingInterval =
+            this.config?.PERFORMANCE?.processingInterval || 5000;
+
+        // --------------------------------------------------
         // Prevent concurrent processing
-        if (performance.now() - this.lastProcessingTime < this.config.PERFORMANCE.processingInterval) {
+        // --------------------------------------------------
+
+        if (
+            performance.now() - this.lastProcessingTime <
+            processingInterval
+        ) {
             return;
         }
 
         this.lastProcessingTime = performance.now();
 
         try {
-            await this.perf.measureAsync('CYCLE', async () => {
-                // Step 1: Capture and process screen
-                const processResult = await this.visionProcessor.processScreen();
 
-                if (!processResult) {
-                    Logger.warn('AGENT', 'Screen processing returned null');
-                    return;
-                }
+            await this.perf.measureAsync(
+                'CYCLE',
+                async () => {
 
-                // Step 2: Send to server if configured
-                if (this.config.SERVER_URL) {
-                    try {
-                        const serverResponse = await this.serverComm.sendRequest('/api/process-screen', {
-                            screenshot: processResult.screenshot,
-                            pageStructure: processResult.pageStructure,
-                            redactionMask: processResult.redactionMask,
-                            sessionId: this.visionProcessor.getSessionInfo().sessionId
-                        }, this.config.TIMEOUT.serverRequest);
+                // Rest of your existing code...
+                    // --------------------------------------------------
+                    // STEP 1: Capture and process screen
+                    // --------------------------------------------------
 
-                        // Step 3: Execute any commands from server
-                        if (serverResponse.commands && serverResponse.commands.length > 0) {
-                            Logger.log('AGENT', `Received ${serverResponse.commands.length} commands from server`);
-                            await this.executeServerCommands(serverResponse.commands);
+                    Logger.log(
+                        'AGENT',
+                        'Processing screen...'
+                    );
+
+                    const processResult =
+                        await this.visionProcessor.processScreen();
+
+                    if (!processResult) {
+
+                        Logger.warn(
+                            'AGENT',
+                            'Screen processing returned null'
+                        );
+
+                        return;
+                    }
+
+                    // --------------------------------------------------
+                    // STEP 2: Send to server if configured
+                    // --------------------------------------------------
+
+                    if (this.config.SERVER_URL) {
+
+                        try {
+
+                            const sessionInfo =
+                                this.visionProcessor.getSessionInfo();
+
+                            const serverResponse =
+                                await this.serverComm.sendRequest(
+                                    '/api/process-screen',
+                                    {
+                                        screenshot:
+                                            processResult.screenshot,
+
+                                        pageStructure:
+                                            processResult.pageStructure,
+
+                                        redactionMask:
+                                            processResult.redactionMask,
+
+                                        sessionId:
+                                            sessionInfo.sessionId
+                                    },
+                                    this.config.TIMEOUT.serverRequest
+                                );
+
+                            // --------------------------------------------------
+                            // STEP 3: Execute commands from server
+                            // --------------------------------------------------
+
+                            if (
+                                serverResponse &&
+                                Array.isArray(
+                                    serverResponse.commands
+                                ) &&
+                                serverResponse.commands.length > 0
+                            ) {
+
+                                Logger.log(
+                                    'AGENT',
+                                    `Received ${serverResponse.commands.length} commands from server`
+                                );
+
+                                await this.executeServerCommands(
+                                    serverResponse.commands
+                                );
+                            }
+
+                            // --------------------------------------------------
+                            // STEP 4: Notify popup/background
+                            // --------------------------------------------------
+
+                            chrome.runtime
+                                .sendMessage({
+                                    type: 'processing_result',
+
+                                    data: {
+                                        success: true,
+
+                                        commandsExecuted:
+                                            serverResponse &&
+                                            Array.isArray(
+                                                serverResponse.commands
+                                            )
+                                                ? serverResponse.commands.length
+                                                : 0,
+
+                                        redactionStats:
+                                            processResult
+                                                .redactionMask
+                                                ?.stats || {}
+                                    }
+                                })
+                                .catch((err) => {
+
+                                    Logger.warn(
+                                        'AGENT',
+                                        'Failed to send result message',
+                                        err
+                                    );
+
+                                });
+
+                        } catch (serverError) {
+
+                            Logger.error(
+                                'AGENT',
+                                'Server communication error',
+                                serverError
+                            );
+
+                            // Notify background/popup that server processing failed
+                            chrome.runtime
+                                .sendMessage({
+                                    type: 'processing_result',
+
+                                    data: {
+                                        success: false,
+                                        error:
+                                            serverError?.message ||
+                                            'Server communication failed'
+                                    }
+                                })
+                                .catch((err) => {
+
+                                    Logger.warn(
+                                        'AGENT',
+                                        'Failed to send server error message',
+                                        err
+                                    );
+
+                                });
                         }
 
-                        // Send response back to popup/background
-                        chrome.runtime.sendMessage({
-                            type: 'processing_result',
-                            data: {
-                                success: true,
-                                commandsExecuted: serverResponse.commands?.length || 0,
-                                redactionStats: processResult.redactionMask.stats
-                            }
-                        }).catch(err => Logger.warn('AGENT', 'Failed to send result message', err));
+                    } else {
 
-                    } catch (serverError) {
-                        Logger.error('AGENT', 'Server communication error', serverError);
+                        Logger.warn(
+                            'AGENT',
+                            'SERVER_URL is not configured'
+                        );
+
+                        chrome.runtime
+                            .sendMessage({
+                                type: 'processing_result',
+
+                                data: {
+                                    success: false,
+                                    error:
+                                        'Server URL is not configured'
+                                }
+                            })
+                            .catch((err) => {
+
+                                Logger.warn(
+                                    'AGENT',
+                                    'Failed to send configuration error message',
+                                    err
+                                );
+
+                            });
                     }
                 }
-            });
+            );
+
         } catch (error) {
-            Logger.error('AGENT', 'Processing cycle error', error);
+
+            Logger.error(
+                'AGENT',
+                'Processing cycle error',
+                error
+            );
+
+            // Notify background/popup of processing failure
+            chrome.runtime
+                .sendMessage({
+                    type: 'processing_result',
+
+                    data: {
+                        success: false,
+                        error:
+                            error?.message ||
+                            'Screen processing failed'
+                    }
+                })
+                .catch((err) => {
+
+                    Logger.warn(
+                        'AGENT',
+                        'Failed to send processing error message',
+                        err
+                    );
+
+                });
         }
     }
 
@@ -155,213 +408,545 @@ class PrivacyBrowserAgent {
      * Execute commands from server
      */
     async executeServerCommands(commands) {
+
+        if (!Array.isArray(commands)) {
+            return;
+        }
+
         for (const command of commands) {
+
             try {
-                const result = await this.commandExecutor.execute(command);
-                Logger.log('AGENT', `Command executed: ${command.type}`, result);
+
+                const result =
+                    await this.commandExecutor.execute(
+                        command
+                    );
+
+                Logger.log(
+                    'AGENT',
+                    `Command executed: ${command.type}`,
+                    result
+                );
 
                 // Small delay between commands
-                await new Promise(resolve => setTimeout(resolve, 500));
+                await new Promise((resolve) => {
+                    setTimeout(resolve, 500);
+                });
+
             } catch (error) {
-                Logger.error('AGENT', `Failed to execute command: ${command.type}`, error);
+
+                Logger.error(
+                    'AGENT',
+                    `Failed to execute command: ${command.type}`,
+                    error
+                );
             }
         }
     }
 
     /**
      * Set up message listeners for communication
+     *
+     * IMPORTANT:
+     * We use ONE message listener for the content script.
      */
     setupMessageListeners() {
-        chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-            try {
-                switch (request.type) {
-                    case 'start_processing':
-                        this.startProcessing();
-                        sendResponse({ success: true, message: 'Processing started' });
-                        break;
 
-                    case 'stop_processing':
-                        this.stopProcessing();
-                        sendResponse({ success: true, message: 'Processing stopped' });
-                        break;
+        chrome.runtime.onMessage.addListener(
+            (request, sender, sendResponse) => {
 
-                    case 'process_now':
-                        this.processScreenCycle().then(() => {
-                            sendResponse({ success: true, message: 'Processing cycle completed' });
-                        });
-                        return true; // Will respond asynchronously
+                try {
 
-                    case 'execute_command':
-                        this.commandExecutor.execute(request.command).then((result) => {
-                            sendResponse(result);
-                        });
-                        return true;
+                    switch (request.type) {
 
-                    case 'get_page_structure':
-                        extractPageStructure().then((structure) => {
-                            sendResponse({ success: true, structure: structure });
-                        });
-                        return true;
+                        // ==================================================
+                        // START PROCESSING
+                        // ==================================================
 
-                    case 'get_status':
-                        sendResponse({
-                            success: true,
-                            isActive: this.isActive,
-                            sessionId: this.visionProcessor.getSessionInfo().sessionId,
-                            privacyStats: this.privacyFilter.getStats()
-                        });
-                        break;
+                        case 'start_processing':
 
-                    case 'update_config':
-                        Config.save(request.config).then(() => {
-                            this.config = request.config;
-                            this.serverComm = new ServerComm(this.config.SERVER_URL);
-                            sendResponse({ success: true, message: 'Configuration updated' });
-                        });
-                        return true;
+                            (async () => {
 
-                    default:
-                        sendResponse({ error: `Unknown request type: ${request.type}` });
+                                try {
+
+                                    const initializedAgent =
+                                        await initializeAgent();
+
+                                    if (!initializedAgent) {
+
+                                        sendResponse({
+                                            success: false,
+                                            error: 'Agent initialization failed'
+                                        });
+
+                                        return;
+                                    }
+
+                                    initializedAgent.startProcessing();
+
+                                    sendResponse({
+                                        success: true,
+                                        message: 'Processing started'
+                                    });
+
+                                } catch (error) {
+
+                                    Logger.error(
+                                        'AGENT',
+                                        'start_processing failed',
+                                        error
+                                    );
+
+                                    sendResponse({
+                                        success: false,
+                                        error:
+                                            error?.message ||
+                                            'Failed to start processing'
+                                    });
+                                }
+
+                            })();
+
+                            return true;
+                        // ==================================================
+                        // STOP PROCESSING
+                        // ==================================================
+
+                        case 'stop_processing':
+
+                            this.stopProcessing();
+
+                            sendResponse({
+                                success: true,
+                                message: 'Processing stopped'
+                            });
+
+                            // Synchronous response
+                            return false;
+
+
+                        // ==================================================
+                        // PROCESS NOW
+                        // ==================================================
+
+                        case 'process_now':
+                            (async () => {
+
+                                try {
+
+                                    const initializedAgent =
+                                        await initializeAgent();
+
+                                    if (!initializedAgent) {
+
+                                        sendResponse({
+                                            success: false,
+                                            error: 'Agent initialization failed'
+                                        });
+
+                                        return;
+                                    }
+
+                                    await initializedAgent.processScreenCycle();
+
+                                    sendResponse({
+                                        success: true,
+                                        message: 'Processing cycle completed'
+                                    });
+
+                                } catch (error) {
+
+                                    Logger.error(
+                                        'AGENT',
+                                        'process_now failed',
+                                        error
+                                    );
+
+                                    sendResponse({
+                                        success: false,
+                                        error:
+                                            error?.message ||
+                                            'Processing cycle failed'
+                                    });
+                                }
+
+                            })();
+
+                            return true;
+                        // ==================================================
+                        // EXECUTE COMMAND
+                        // ==================================================
+
+                        case 'execute_command':
+
+                            this.commandExecutor
+                                .execute(request.command)
+
+                                .then((result) => {
+
+                                    sendResponse({
+                                        success: true,
+                                        result: result
+                                    });
+
+                                })
+
+                                .catch((error) => {
+
+                                    Logger.error(
+                                        'AGENT',
+                                        'Command execution failed',
+                                        error
+                                    );
+
+                                    sendResponse({
+                                        success: false,
+                                        error:
+                                            error?.message ||
+                                            'Command execution failed'
+                                    });
+
+                                });
+
+                            // Async response
+                            return true;
+
+
+                        // ==================================================
+                        // GET PAGE STRUCTURE
+                        // ==================================================
+
+                        case 'get_page_structure':
+
+                            Promise.resolve(
+                                extractPageStructure()
+                            )
+
+                                .then((structure) => {
+
+                                    sendResponse({
+                                        success: true,
+                                        structure: structure
+                                    });
+
+                                })
+
+                                .catch((error) => {
+
+                                    Logger.error(
+                                        'AGENT',
+                                        'Page structure extraction failed',
+                                        error
+                                    );
+
+                                    sendResponse({
+                                        success: false,
+                                        error:
+                                            error?.message ||
+                                            'Page structure extraction failed'
+                                    });
+
+                                });
+
+                            // Async response
+                            return true;
+
+
+                        // ==================================================
+                        // ANALYZE PAGE
+                        // ==================================================
+
+                        case 'ANALYZE_PAGE':
+
+                            try {
+
+                                const result =
+                                    analyzePage();
+
+                                sendResponse(result);
+
+                            } catch (error) {
+
+                                Logger.error(
+                                    'AGENT',
+                                    'Page analysis failed',
+                                    error
+                                );
+
+                                sendResponse({
+                                    success: false,
+                                    error:
+                                        error?.message ||
+                                        'Page analysis failed'
+                                });
+                            }
+
+                            // Synchronous response
+                            return false;
+
+
+                        // ==================================================
+                        // GET STATUS
+                        // ==================================================
+
+                        case 'get_status':
+
+                            sendResponse({
+                                success: true,
+
+                                isActive:
+                                    this.isActive,
+
+                                sessionId:
+                                    this.visionProcessor
+                                        .getSessionInfo()
+                                        .sessionId,
+
+                                privacyStats:
+                                    this.privacyFilter.getStats()
+                            });
+
+                            // Synchronous response
+                            return false;
+
+
+                        // ==================================================
+                        // UPDATE CONFIG
+                        // ==================================================
+
+                        case 'update_config':
+
+                            Config.save(request.config)
+
+                                .then(() => {
+
+                                    this.config =
+                                        request.config;
+
+                                    this.serverComm =
+                                        new ServerComm(
+                                            this.config.SERVER_URL || 'http://localhost:8000'
+                                        );
+
+                                    sendResponse({
+                                        success: true,
+                                        message:
+                                            'Configuration updated'
+                                    });
+
+                                })
+
+                                .catch((error) => {
+
+                                    Logger.error(
+                                        'AGENT',
+                                        'Config update failed',
+                                        error
+                                    );
+
+                                    sendResponse({
+                                        success: false,
+                                        error:
+                                            error?.message ||
+                                            'Configuration update failed'
+                                    });
+
+                                });
+
+                            // Async response
+                            return true;
+
+
+                        // ==================================================
+                        // UNKNOWN MESSAGE
+                        // ==================================================
+
+                        default:
+
+                            Logger.warn(
+                                'AGENT',
+                                `Unknown request type: ${request.type}`
+                            );
+
+                            sendResponse({
+                                success: false,
+                                error:
+                                    `Unknown request type: ${request.type}`
+                            });
+
+                            return false;
+                    }
+
+                } catch (error) {
+
+                    Logger.error(
+                        'AGENT',
+                        'Message handler error',
+                        error
+                    );
+
+                    sendResponse({
+                        success: false,
+                        error:
+                            error?.message ||
+                            'Message handler error'
+                    });
+
+                    // Synchronous error response
+                    return false;
                 }
-            } catch (error) {
-                Logger.error('AGENT', 'Message handler error', error);
-                sendResponse({ error: error.message });
             }
-        });
+        );
     }
 
     /**
      * Set up mutation observer for DOM changes
      */
     setupMutationObserver() {
-        const observer = new MutationObserver((mutations) => {
-            // Flag for page content changes
-            if (this.isActive) {
-                // Trigger processing on next cycle instead of immediately
-                // to avoid excessive processing
-            }
-        });
 
-        observer.observe(document.body, {
-            childList: true,
-            subtree: true,
-            attributes: true,
-            attributeFilter: ['value', 'class', 'style'],
-            characterData: false
-        });
-    }
-}
+        const observer =
+            new MutationObserver((mutations) => {
 
-// Initialize and start the agent
-let agent = null;
+                // Flag for page content changes
+                if (this.isActive) {
 
-document.addEventListener('DOMContentLoaded', async () => {
-    if (!agent) {
-        agent = new PrivacyBrowserAgent();
-        await agent.initialize();
-    }
-});
+                    // Trigger processing on next cycle
+                    // instead of immediately
+                    // to avoid excessive processing
 
-// Also initialize if script runs after DOM is ready
-if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', async () => {
-        if (!agent) {
-            agent = new PrivacyBrowserAgent();
-            await agent.initialize();
+                }
+            });
+
+        if (document.body) {
+
+            observer.observe(
+                document.body,
+                {
+                    childList: true,
+                    subtree: true,
+                    attributes: true,
+                    attributeFilter: [
+                        'value',
+                        'class',
+                        'style'
+                    ],
+                    characterData: false
+                }
+            );
+
+        } else {
+
+            Logger.warn(
+                'AGENT',
+                'document.body not available for MutationObserver'
+            );
         }
-    });
-} else {
-    if (!agent) {
-        agent = new PrivacyBrowserAgent();
-        agent.initialize();
     }
 }
 
-Logger.log('AGENT', 'Content script loaded');
 
+// ================================================================
+// PAGE ANALYSIS HELPERS
+// ================================================================
 
+/**
+ * Extract interactive elements
+ */
 function extractInteractiveElements() {
 
     const elements = document.querySelectorAll(
-        "input, textarea, button, select, a"
+        'input, textarea, button, select, a'
     );
 
     return Array.from(elements)
-        .filter(element => {
 
-            const rect = element.getBoundingClientRect();
+        .filter((element) => {
+
+            const rect =
+                element.getBoundingClientRect();
 
             return (
                 rect.width > 0 &&
                 rect.height > 0
             );
+
         })
+
         .map((element, index) =>
             getElementInfo(element, index)
         );
 }
 
 
+/**
+ * Detect sensitive elements
+ */
 function detectSensitiveElements(elements) {
 
-    return elements.map(element => {
+    return elements.map((element) => {
 
         let sensitive = false;
         let reason = null;
 
-        const type = (element.type || "").toLowerCase();
+        const type =
+            (element.type || '')
+                .toLowerCase();
 
-        const name = (element.name || "").toLowerCase();
+        const name =
+            (element.name || '')
+                .toLowerCase();
 
         const placeholder =
-            (element.placeholder || "").toLowerCase();
+            (element.placeholder || '')
+                .toLowerCase();
 
         const autocomplete =
-            (element.autocomplete || "").toLowerCase();
+            (element.autocomplete || '')
+                .toLowerCase();
 
 
         // Password
-        if (type === "password") {
+        if (type === 'password') {
 
             sensitive = true;
-            reason = "password";
+            reason = 'password';
         }
 
 
         // Email
         else if (
-            type === "email" ||
-            autocomplete.includes("email") ||
-            name.includes("email") ||
-            placeholder.includes("email")
+            type === 'email' ||
+            autocomplete.includes('email') ||
+            name.includes('email') ||
+            placeholder.includes('email')
         ) {
 
             sensitive = true;
-            reason = "email";
+            reason = 'email';
         }
 
 
         // Phone
         else if (
-            type === "tel" ||
-            autocomplete.includes("tel") ||
-            name.includes("phone") ||
-            name.includes("mobile")
+            type === 'tel' ||
+            autocomplete.includes('tel') ||
+            name.includes('phone') ||
+            name.includes('mobile')
         ) {
 
             sensitive = true;
-            reason = "phone";
+            reason = 'phone';
         }
 
 
         // Credit card
         else if (
-            autocomplete.includes("cc-number") ||
-            name.includes("card")
+            autocomplete.includes('cc-number') ||
+            name.includes('card')
         ) {
 
             sensitive = true;
-            reason = "credit_card";
+            reason = 'credit_card';
         }
 
 
@@ -374,13 +959,19 @@ function detectSensitiveElements(elements) {
 }
 
 
+/**
+ * Analyze page
+ */
 function analyzePage() {
 
-    const elements = extractInteractiveElements();
+    const elements =
+        extractInteractiveElements();
 
-    const analyzed = detectSensitiveElements(elements);
+    const analyzed =
+        detectSensitiveElements(elements);
 
     return {
+        success: true,
         url: window.location.href,
         title: document.title,
         timestamp: Date.now(),
@@ -389,16 +980,66 @@ function analyzePage() {
 }
 
 
-chrome.runtime.onMessage.addListener(
-    (message, sender, sendResponse) => {
+// ================================================================
+// INITIALIZATION
+// ================================================================
 
-        if (message.type === "ANALYZE_PAGE") {
+let agent = null;
+let agentInitializationPromise = null;
 
-            const result = analyzePage();
+/**
+ * Initialize agent
+ */
+async function initializeAgent() {
 
-            sendResponse(result);
+    if (agentInitializationPromise) {
+        return agentInitializationPromise;
+    }
+
+    agentInitializationPromise = (async () => {
+
+        if (agent) {
+            return agent;
         }
 
-        return true;
-    }
+        agent = new PrivacyBrowserAgent();
+
+        const success = await agent.initialize();
+
+        if (!success) {
+            Logger.error(
+                'AGENT',
+                'Agent initialization failed'
+            );
+
+            return null;
+        }
+
+        return agent;
+
+    })();
+
+    return agentInitializationPromise;
+}
+
+/**
+ * Initialize when DOM is ready
+ */
+if (document.readyState === 'loading') {
+
+    document.addEventListener(
+        'DOMContentLoaded',
+        initializeAgent,
+        { once: true }
+    );
+
+} else {
+
+    initializeAgent();
+}
+
+
+Logger.log(
+    'AGENT',
+    'Content script loaded'
 );
