@@ -14,10 +14,48 @@
         </header>
 
         <section class="control-panel">
+            <div id="userGoalSection" class="goal-input-section">
+                <h2>What do you want to do?</h2>
+                <textarea 
+                    id="userGoal" 
+                    class="goal-input"
+                    placeholder="e.g., Log in to my account with my credentials&#10;or: Search for laptop on Amazon&#10;or: Fill out the contact form"
+                    rows="3"></textarea>
+                <div class="button-group">
+                    <button id="startAgentBtn" class="btn btn-primary">Start Agent</button>
+                    <button id="stopAgentBtn" class="btn btn-secondary" disabled>Stop Agent</button>
+                </div>
+            </div>
+
+            <div id="agentStatusSection" class="agent-status-section" style="display: none;">
+                <h2>Agent Running</h2>
+                <div class="status-item">
+                    <label>Goal:</label>
+                    <span id="goalText" class="goal-display"></span>
+                </div>
+                <div class="status-item">
+                    <label>Progress:</label>
+                    <span id="stepNumber">0</span> / <span id="maxSteps">20</span> steps
+                </div>
+                <div class="status-item">
+                    <label>Current Action:</label>
+                    <span id="actionText" class="action-display">Initializing...</span>
+                </div>
+                <div class="status-item">
+                    <label>Status:</label>
+                    <span id="statusBadge" class="badge badge-running">Running</span>
+                </div>
+                <div class="status-item" id="errorInfoItem" style="display: none;">
+                    <label>Errors:</label>
+                    <span id="errorCount" class="error-count">0</span> / 3
+                </div>
+                <div id="agentLogContainer" class="agent-log-container"></div>
+            </div>
+
             <div class="controls">
-                <button id="startBtn" class="btn btn-primary">Start Monitoring</button>
-                <button id="stopBtn" class="btn btn-secondary" disabled>Stop Monitoring</button>
-                <button id="processBtn" class="btn btn-info">Process Now</button>
+                <button id="startBtn" class="btn btn-primary" title="Legacy: Start monitoring">Start Monitoring</button>
+                <button id="stopBtn" class="btn btn-secondary" disabled title="Legacy: Stop monitoring">Stop Monitoring</button>
+                <button id="processBtn" class="btn btn-info" title="Legacy: Process now">Process Now</button>
             </div>
         </section>
 

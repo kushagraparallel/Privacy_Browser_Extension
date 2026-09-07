@@ -1,23 +1,27 @@
 /**
  * Popup UI Controller for Privacy Browser Agent
+ * Upgraded for agent-powered user queries
  */
 
 class PopupController {
     constructor() {
         this.config = null;
-        this.statusUpdateInterval = null;
+        this.currentSessionId = null;
+        this.agentRunning = false;
+        this.currentStep = 0;
+        this.maxSteps = 20;
         this.logs = [];
-        this.maxLogs = 50;
+        this.maxLogs = 100;
 
         this.initializeUI();
         this.loadConfiguration();
         this.setupEventListeners();
-        this.startStatusUpdates();
+        this.listenForAgentEvents();
     }
 
     initializeUI() {
-        // Initialize UI elements
-        this.elements = {
+        // Legacy UI elements
+        this.legacyElements = {
             startBtn: document.getElementById('startBtn'),
             stopBtn: document.getElementById('stopBtn'),
             processBtn: document.getElementById('processBtn'),
@@ -40,227 +44,458 @@ class PopupController {
             settingsLink: document.getElementById('settingsLink'),
             helpLink: document.getElementById('helpLink')
         };
+
+        // NEW: Agent UI elements
+        this.agentElements = {
+            userGoalInput: document.getElementById('userGoal'),
+            startAgentBtn: document.getElementById('startAgentBtn'),
+            stopAgentBtn: document.getElementById('stopAgentBtn'),
+            
+            userGoalSection: document.getElementById('userGoalSection'),
+            agentStatusSection: document.getElementById('agentStatusSection'),
+            
+            goalText: document.getElementById('goalText'),
+            stepNumber: document.getElementById('stepNumber'),
+            maxSteps: document.getElementById('maxSteps'),
+            actionText: document.getElementById('actionText'),
+            statusBadge: document.getElementById('statusBadge'),
+            errorCount: document.getElementById('errorCount'),
+            errorInfoItem: document.getElementById('errorInfoItem'),
+            
+            agentLogContainer: document.getElementById('agentLogContainer')
+        };
+
+        this.addLog('Popup initialized', 'info', 'legacy');
     }
 
     setupEventListeners() {
-        this.elements.startBtn.addEventListener('click', () => this.startMonitoring());
-        this.elements.stopBtn.addEventListener('click', () => this.stopMonitoring());
-        this.elements.processBtn.addEventListener('click', () => this.processNow());
-        this.elements.saveConfig.addEventListener('click', () => this.saveConfiguration());
-        this.elements.clearLogs.addEventListener('click', () => this.clearLogs());
+        // Legacy controls
+        this.legacyElements.startBtn.addEventListener('click', () => this.startMonitoring());
+        this.legacyElements.stopBtn.addEventListener('click', () => this.stopMonitoring());
+        this.legacyElements.processBtn.addEventListener('click', () => this.processNow());
+        this.legacyElements.saveConfig.addEventListener('click', () => this.saveConfiguration());
+        this.legacyElements.clearLogs.addEventListener('click', () => this.clearLogs('legacy'));
+
+        // NEW: Agent controls
+        this.agentElements.startAgentBtn.addEventListener('click', () => this.startAgentSession());
+        this.agentElements.stopAgentBtn.addEventListener('click', () => this.stopAgentSession());
         
-        this.elements.settingsLink.addEventListener('click', (e) => {
+        // Allow Enter in textarea to start (Shift+Enter for newline)
+        this.agentElements.userGoalInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                this.startAgentSession();
+            }
+        });
+
+        this.legacyElements.settingsLink.addEventListener('click', (e) => {
             e.preventDefault();
             this.openSettings();
         });
 
-        this.elements.helpLink.addEventListener('click', (e) => {
+        this.legacyElements.helpLink.addEventListener('click', (e) => {
             e.preventDefault();
             this.openHelp();
         });
     }
 
-    async loadConfiguration() {
+    /**
+     * Listen for agent events from content script
+     */
+    listenForAgentEvents() {
+        chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+            if (request.type === 'agent_event') {
+                this.handleAgentEvent(request);
+                sendResponse({ received: true });
+            }
+        });
+    }
+
+    /**
+     * Handle events from the agent loop
+     */
+    handleAgentEvent(event) {
+        switch (event.type) {
+            case 'step_started':
+                this.currentStep = event.step;
+                this.updateStepDisplay();
+                this.addLog(`Step ${event.step}: Starting`, 'step', 'agent');
+                break;
+
+            case 'action_received':
+                this.agentElements.actionText.textContent = 
+                    `${event.action_type}${event.reason ? ': ' + event.reason : ''}`;
+                this.addLog(`Action: ${event.action_type}`, 'action', 'agent');
+                break;
+
+            case 'action_executed':
+                this.agentElements.actionText.textContent = '✓ Executed';
+                this.addLog(`Action executed (${event.duration_ms}ms)`, 'success', 'agent');
+                break;
+
+            case 'action_failed':
+                this.agentElements.actionText.textContent = `✗ Failed: ${event.error_code}`;
+                this.agentElements.errorInfoItem.style.display = 'block';
+                this.agentElements.errorCount.textContent = event.error_count;
+                this.addLog(`Action failed: ${event.error_code}`, 'error', 'agent');
+                break;
+
+            case 'agent_finished':
+                this.agentRunning = false;
+                this.updateUIForAgentEnd();
+                this.agentElements.statusBadge.textContent = '✓ Completed';
+                this.agentElements.statusBadge.className = 'badge badge-completed';
+                this.addLog(`Agent finished: ${event.reason}`, 'success', 'agent');
+                break;
+
+            case 'agent_error_limit':
+                this.agentRunning = false;
+                this.updateUIForAgentEnd();
+                this.agentElements.statusBadge.textContent = '✗ Error limit';
+                this.agentElements.statusBadge.className = 'badge badge-failed';
+                this.addLog(`Agent stopped: ${event.message}`, 'error', 'agent');
+                break;
+
+            case 'agent_stopped':
+                this.agentRunning = false;
+                this.updateUIForAgentEnd();
+                this.agentElements.statusBadge.textContent = '⊘ Stopped';
+                this.agentElements.statusBadge.className = 'badge badge-stopped';
+                this.addLog('Agent stopped by user', 'info', 'agent');
+                break;
+
+            case 'agent_ended':
+                this.addLog(
+                    `Agent session ended (${event.steps_taken} steps, ${event.errors} errors)`,
+                    'info',
+                    'agent'
+                );
+                break;
+
+            case 'loop_error':
+                this.addLog(`Error: ${event.error_message}`, 'error', 'agent');
+                break;
+        }
+    }
+
+    /**
+     * Start agent with user goal
+     */
+    async startAgentSession() {
+        const userGoal = this.agentElements.userGoalInput.value.trim();
+        
+        if (!userGoal) {
+            alert('Please enter a goal for the agent');
+            return;
+        }
+
+        if (this.agentRunning) {
+            alert('Agent is already running');
+            return;
+        }
+
         try {
-            const config = await this.sendMessage({
-                type: 'get_status'
+            this.addLog(`Starting agent: "${userGoal}"`, 'info', 'agent');
+
+            // Get server URL from config
+            const serverUrl = this.legacyElements.serverUrl.value || 'http://localhost:8000';
+
+            // Send message to content script
+            const response = await this.sendMessage({
+                type: 'start_agent_session',
+                goal: userGoal,
+                serverUrl: serverUrl
             });
 
-            if (config.success) {
-                this.updateStatusUI(config);
-                this.addLog('Configuration loaded', 'info');
+            if (!response || !response.success) {
+                throw new Error(response?.error || 'Failed to start session');
             }
 
-            // Load from storage
-            chrome.storage.sync.get({
-                SERVER_URL: 'http://localhost:8000',
-                ENABLE_REDACTION: true,
-                REDACTION_MODE: 'blur'
-            }, (items) => {
-                this.elements.serverUrl.value = items.SERVER_URL;
-                this.elements.enableRedaction.checked = items.ENABLE_REDACTION;
-                this.elements.redactionMode.value = items.REDACTION_MODE;
-                this.config = items;
+            this.currentSessionId = response.session_id;
+            this.agentRunning = true;
+            this.currentStep = 0;
+            this.agentElements.errorCount.textContent = '0';
+            this.agentElements.errorInfoItem.style.display = 'none';
+
+            // Update UI to show agent is running
+            this.updateUIForAgentStart();
+
+            this.addLog(`Session created: ${this.currentSessionId}`, 'success', 'agent');
+
+        } catch (error) {
+            alert(`Failed to start agent: ${error.message}`);
+            this.addLog(`Error: ${error.message}`, 'error', 'agent');
+        }
+    }
+
+    /**
+     * Stop agent session
+     */
+    async stopAgentSession() {
+        if (!this.agentRunning) {
+            return;
+        }
+
+        try {
+            await this.sendMessage({
+                type: 'stop_agent_session',
+                session_id: this.currentSessionId
             });
+
+            this.agentRunning = false;
+            this.updateUIForAgentEnd();
+            this.addLog('Agent stopped', 'info', 'agent');
+
         } catch (error) {
-            this.addLog(`Failed to load config: ${error.message}`, 'error');
+            this.addLog(`Error stopping agent: ${error.message}`, 'error', 'agent');
         }
     }
 
-    async startMonitoring() {
-        try {
-            await this.sendToContent({ type: 'start_processing' });
-            this.elements.startBtn.disabled = true;
-            this.elements.stopBtn.disabled = false;
-            this.elements.statusLabel.textContent = 'Active';
-            this.elements.statusLabel.className = 'status-active';
-            this.addLog('Monitoring started', 'success');
-        } catch (error) {
-            this.addLog(`Failed to start: ${error.message}`, 'error');
-        }
+    /**
+     * Update UI when agent starts
+     */
+    updateUIForAgentStart() {
+        this.agentElements.userGoalSection.style.display = 'none';
+        this.agentElements.agentStatusSection.style.display = 'block';
+        
+        this.agentElements.goalText.textContent = this.agentElements.userGoalInput.value;
+        this.agentElements.actionText.textContent = 'Initializing...';
+        this.agentElements.statusBadge.textContent = 'Running';
+        this.agentElements.statusBadge.className = 'badge badge-running';
+        
+        this.agentElements.startAgentBtn.disabled = true;
+        this.agentElements.stopAgentBtn.disabled = false;
+
+        // Clear agent logs
+        this.agentElements.agentLogContainer.innerHTML = '';
+        this.logs = [];
     }
 
-    async stopMonitoring() {
-        try {
-            await this.sendToContent({ type: 'stop_processing' });
-            this.elements.startBtn.disabled = false;
-            this.elements.stopBtn.disabled = true;
-            this.elements.statusLabel.textContent = 'Inactive';
-            this.elements.statusLabel.className = 'status-inactive';
-            this.addLog('Monitoring stopped', 'warning');
-        } catch (error) {
-            this.addLog(`Failed to stop: ${error.message}`, 'error');
-        }
+    /**
+     * Update UI when agent ends
+     */
+    updateUIForAgentEnd() {
+        this.agentElements.userGoalSection.style.display = 'block';
+        this.agentElements.agentStatusSection.style.display = 'none';
+        
+        this.agentElements.startAgentBtn.disabled = false;
+        this.agentElements.stopAgentBtn.disabled = true;
+
+        // User can start another goal
+        this.agentElements.userGoalInput.focus();
     }
 
-    async processNow() {
-        try {
-            this.elements.processBtn.disabled = true;
-            this.addLog('Processing screen...', 'info');
-            
-            const result = await this.sendToContent({ type: 'process_now' });
-            this.addLog('Screen processed successfully', 'success');
-            
-            this.elements.processBtn.disabled = false;
-        } catch (error) {
-            this.addLog(`Processing failed: ${error.message}`, 'error');
-            this.elements.processBtn.disabled = false;
-        }
+    /**
+     * Update step display
+     */
+    updateStepDisplay() {
+        this.agentElements.stepNumber.textContent = this.currentStep.toString();
     }
 
-    saveConfiguration() {
-        const config = {
-            SERVER_URL: this.elements.serverUrl.value,
-            ENABLE_REDACTION: this.elements.enableRedaction.checked,
-            REDACTION_MODE: this.elements.redactionMode.value
-        };
-
-        chrome.storage.sync.set(config, () => {
-            this.addLog('Settings saved', 'success');
-            this.sendToContent({
-                type: 'update_config',
-                config: config
-            }).catch(err => {
-                this.addLog(`Failed to update content script: ${err.message}`, 'error');
+    /**
+     * Send message to content script
+     */
+    sendMessage(message) {
+        return new Promise((resolve) => {
+            chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+                if (tabs[0]) {
+                    chrome.tabs.sendMessage(tabs[0].id, message, (response) => {
+                        resolve(response || {});
+                    }).catch(() => {
+                        resolve({ success: false, error: 'Content script not ready' });
+                    });
+                } else {
+                    resolve({ success: false, error: 'No active tab' });
+                }
             });
         });
     }
 
-    async startStatusUpdates() {
-        this.statusUpdateInterval = setInterval(async () => {
-            try {
-                const status = await this.sendToContent({ type: 'get_status' });
-                if (status.success) {
-                    this.updateStatusUI(status);
-                }
-            } catch (error) {
-                // Silently handle errors during updates
-            }
-        }, 1000);
-    }
-
-    updateStatusUI(status) {
-        if (status.isActive) {
-            this.elements.statusLabel.textContent = 'Active';
-            this.elements.statusLabel.className = 'status-active';
-            this.elements.startBtn.disabled = true;
-            this.elements.stopBtn.disabled = false;
-        } else {
-            this.elements.statusLabel.textContent = 'Inactive';
-            this.elements.statusLabel.className = 'status-inactive';
-            this.elements.startBtn.disabled = false;
-            this.elements.stopBtn.disabled = true;
-        }
-
-        if (status.sessionId) {
-            this.elements.sessionId.textContent = status.sessionId;
-        }
-
-        if (status.privacyStats) {
-            this.elements.sensitiveCount.textContent = status.privacyStats.sensitiveDetected || 0;
-            this.elements.redactedCount.textContent = status.privacyStats.redacted || 0;
-        }
-    }
-
-    addLog(message, type = 'info') {
+    /**
+     * Add log entry
+     */
+    addLog(message, level = 'info', section = 'legacy') {
         const timestamp = new Date().toLocaleTimeString();
-        const logEntry = {
-            message,
-            type,
-            timestamp
-        };
-
+        const logEntry = { timestamp, message, level, section };
+        
         this.logs.push(logEntry);
         if (this.logs.length > this.maxLogs) {
             this.logs.shift();
         }
 
-        this.renderLogs();
+        // Render to appropriate log container
+        if (section === 'agent' && this.agentElements.agentLogContainer) {
+            this.renderAgentLog();
+        } else if (section === 'legacy') {
+            this.renderLegacyLog();
+        }
     }
 
-    renderLogs() {
-        this.elements.logContainer.innerHTML = this.logs
-            .map(log => `<div class="log-entry log-${log.type}">[${log.timestamp}] ${log.message}</div>`)
-            .join('');
+    /**
+     * Render agent log
+     */
+    renderAgentLog() {
+        const agentLogs = this.logs.filter(l => l.section === 'agent');
+        const html = agentLogs.map(log => `
+            <div class="log-entry log-${log.level}">
+                <span class="log-time">${log.timestamp}</span>
+                <span class="log-msg">${this.escapeHtml(log.message)}</span>
+            </div>
+        `).join('');
+
+        this.agentElements.agentLogContainer.innerHTML = html;
+        this.agentElements.agentLogContainer.scrollTop = this.agentElements.agentLogContainer.scrollHeight;
+    }
+
+    /**
+     * Render legacy log
+     */
+    renderLegacyLog() {
+        const legacyLogs = this.logs.filter(l => l.section === 'legacy');
+        const html = legacyLogs.map(log => `
+            <div class="log-entry log-${log.level}">
+                <span class="log-time">${log.timestamp}</span>
+                <span class="log-msg">${this.escapeHtml(log.message)}</span>
+            </div>
+        `).join('');
+
+        this.legacyElements.logContainer.innerHTML = html;
+        this.legacyElements.logContainer.scrollTop = this.legacyElements.logContainer.scrollHeight;
+    }
+
+    /**
+     * Clear logs
+     */
+    clearLogs(section = 'all') {
+        if (section === 'all') {
+            this.logs = [];
+        } else {
+            this.logs = this.logs.filter(l => l.section !== section);
+        }
+
+        this.renderLegacyLog();
+        if (this.agentElements.agentLogContainer) {
+            this.renderAgentLog();
+        }
+    }
+
+    /**
+     * Load configuration from storage
+     */
+    loadConfiguration() {
+        chrome.storage.sync.get({
+            SERVER_URL: 'http://localhost:8000',
+            ENABLE_REDACTION: true,
+            REDACTION_MODE: 'blur'
+        }, (items) => {
+            this.legacyElements.serverUrl.value = items.SERVER_URL;
+            this.legacyElements.enableRedaction.checked = items.ENABLE_REDACTION;
+            this.legacyElements.redactionMode.value = items.REDACTION_MODE;
+            this.addLog('Configuration loaded', 'info', 'legacy');
+        });
+    }
+
+    /**
+     * Save configuration
+     */
+    saveConfiguration() {
+        const config = {
+            SERVER_URL: this.legacyElements.serverUrl.value,
+            ENABLE_REDACTION: this.legacyElements.enableRedaction.checked,
+            REDACTION_MODE: this.legacyElements.redactionMode.value
+        };
+
+        chrome.storage.sync.set(config, () => {
+            this.addLog('Configuration saved', 'success', 'legacy');
+            alert('Settings saved successfully');
+        });
+    }
+
+    /**
+     * Start monitoring (legacy)
+     */
+    async startMonitoring() {
+        this.addLog('Starting monitoring...', 'info', 'legacy');
+        const response = await this.sendMessage({
+            type: 'start_monitoring'
+        });
         
-        // Scroll to bottom
-        this.elements.logContainer.scrollTop = this.elements.logContainer.scrollHeight;
+        if (response && response.success) {
+            this.legacyElements.startBtn.disabled = true;
+            this.legacyElements.stopBtn.disabled = false;
+            this.legacyElements.statusLabel.textContent = 'Active';
+            this.legacyElements.statusLabel.className = 'status-active';
+            this.addLog('Monitoring started', 'success', 'legacy');
+        } else {
+            this.addLog('Failed to start monitoring', 'error', 'legacy');
+        }
     }
 
-    clearLogs() {
-        this.logs = [];
-        this.renderLogs();
-        this.addLog('Logs cleared', 'info');
-    }
-
-    async sendToContent(message) {
-        return new Promise((resolve, reject) => {
-            chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-                if (!tabs[0]) {
-                    reject(new Error('No active tab'));
-                    return;
-                }
-
-                chrome.tabs.sendMessage(tabs[0].id, message, (response) => {
-                    if (chrome.runtime.lastError) {
-                        reject(new Error(chrome.runtime.lastError.message));
-                    } else if (response?.error) {
-                        reject(new Error(response.error));
-                    } else {
-                        resolve(response || {});
-                    }
-                });
-            });
+    /**
+     * Stop monitoring (legacy)
+     */
+    async stopMonitoring() {
+        this.addLog('Stopping monitoring...', 'info', 'legacy');
+        const response = await this.sendMessage({
+            type: 'stop_monitoring'
         });
+
+        if (response && response.success) {
+            this.legacyElements.startBtn.disabled = false;
+            this.legacyElements.stopBtn.disabled = true;
+            this.legacyElements.statusLabel.textContent = 'Inactive';
+            this.legacyElements.statusLabel.className = 'status-inactive';
+            this.addLog('Monitoring stopped', 'success', 'legacy');
+        } else {
+            this.addLog('Failed to stop monitoring', 'error', 'legacy');
+        }
     }
 
-    async sendMessage(message) {
-        return new Promise((resolve, reject) => {
-            chrome.runtime.sendMessage(message, (response) => {
-                if (chrome.runtime.lastError) {
-                    reject(new Error(chrome.runtime.lastError.message));
-                } else {
-                    resolve(response || {});
-                }
-            });
+    /**
+     * Process now (legacy)
+     */
+    async processNow() {
+        this.addLog('Processing screen...', 'info', 'legacy');
+        const response = await this.sendMessage({
+            type: 'process_now'
         });
+
+        if (response && response.success) {
+            this.addLog(`Processed: ${response.description}`, 'success', 'legacy');
+        } else {
+            this.addLog('Processing failed', 'error', 'legacy');
+        }
     }
 
+    /**
+     * Open settings (placeholder)
+     */
     openSettings() {
-        chrome.runtime.openOptionsPage?.(() => {
-            this.addLog('Opening settings page', 'info');
-        });
+        alert('Advanced settings coming soon');
     }
 
+    /**
+     * Open help (placeholder)
+     */
     openHelp() {
-        // Open help documentation
-        chrome.tabs.create({
-            url: 'https://github.com/your-repo/docs'
-        });
+        alert('Help documentation: See PRODUCTION_UPGRADE.md');
+    }
+
+    /**
+     * HTML escape for log display
+     */
+    escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
     }
 }
 
-// Initialize popup controller when DOM is ready
-document.addEventListener('DOMContentLoaded', () => {
-    window.popupController = new PopupController();
-});
+// Initialize when popup loads
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => {
+        new PopupController();
+    });
+} else {
+    new PopupController();
+}
