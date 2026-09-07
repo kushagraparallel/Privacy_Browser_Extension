@@ -1,0 +1,537 @@
+/**
+ * Command Executor - Executes actions received from the server
+ * Handles all client-side interactions: clicks, scrolls, form fills, etc.
+ */
+
+class CommandExecutor {
+    constructor() {
+        this.executionHistory = [];
+        this.maxHistorySize = 100;
+    }
+
+    /**
+     * Execute a command received from the server
+     */
+    async execute(command) {
+        try {
+            const startTime = performance.now();
+            
+            Logger.log('EXECUTOR', `Executing command: ${command.type}`, command);
+
+            let result = null;
+
+            switch (command.type) {
+                case 'click':
+                    result = await this.executeClick(command);
+                    break;
+                case 'scroll':
+                    result = await this.executeScroll(command);
+                    break;
+                case 'type':
+                    result = await this.executeType(command);
+                    break;
+                case 'select':
+                    result = await this.executeSelect(command);
+                    break;
+                case 'wait':
+                    result = await this.executeWait(command);
+                    break;
+                case 'submit':
+                    result = await this.executeSubmit(command);
+                    break;
+                case 'focus':
+                    result = await this.executeFocus(command);
+                    break;
+                case 'hover':
+                    result = await this.executeHover(command);
+                    break;
+                case 'screenshot':
+                    result = await this.executeScreenshot(command);
+                    break;
+                case 'extract_data':
+                    result = await this.executeExtractData(command);
+                    break;
+                default:
+                    throw new Error(`Unknown command type: ${command.type}`);
+            }
+
+            const duration = performance.now() - startTime;
+            this.recordExecution(command, result, duration, true);
+
+            return {
+                success: true,
+                result: result,
+                duration: duration,
+                timestamp: Date.now()
+            };
+        } catch (error) {
+            Logger.error('EXECUTOR', `Command execution failed: ${command.type}`, error);
+            this.recordExecution(command, null, 0, false, error.message);
+
+            return {
+                success: false,
+                error: error.message,
+                timestamp: Date.now()
+            };
+        }
+    }
+
+    /**
+     * Execute click command
+     */
+    async executeClick(command) {
+        const { target, x, y } = command;
+        let element = null;
+
+        if (target === 'element_id') {
+            element = this.findElementById(command.element_id);
+        } else if (target === 'coordinates') {
+            element = document.elementFromPoint(x, y);
+        } else if (target === 'selector') {
+            element = document.querySelector(command.selector);
+        } else if (target === 'xpath') {
+            element = this.findElementByXPath(command.xpath);
+        }
+
+        if (!element) {
+            throw new Error(`Element not found for click: ${JSON.stringify(command)}`);
+        }
+
+        // Scroll element into view
+        element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        await this.wait(500);
+
+        // Trigger click
+        const clickEvent = new MouseEvent('click', {
+            bubbles: true,
+            cancelable: true,
+            view: window
+        });
+
+        const rect = element.getBoundingClientRect();
+        const clickX = rect.left + rect.width / 2;
+        const clickY = rect.top + rect.height / 2;
+
+        // Simulate mouse movement
+        this.dispatchMouseEvent('mousemove', clickX, clickY);
+        await this.wait(100);
+
+        element.dispatchEvent(clickEvent);
+        await this.wait(200);
+
+        return {
+            clicked: true,
+            element: element.tagName,
+            text: element.textContent?.substring(0, 100) || ''
+        };
+    }
+
+    /**
+     * Execute scroll command
+     */
+    async executeScroll(command) {
+        const { direction, amount, smooth = true } = command;
+        const scrollAmount = amount || 300;
+
+        let behavior = smooth ? 'smooth' : 'auto';
+
+        if (direction === 'down') {
+            window.scrollBy({
+                top: scrollAmount,
+                behavior: behavior
+            });
+        } else if (direction === 'up') {
+            window.scrollBy({
+                top: -scrollAmount,
+                behavior: behavior
+            });
+        } else if (direction === 'left') {
+            window.scrollBy({
+                left: -scrollAmount,
+                behavior: behavior
+            });
+        } else if (direction === 'right') {
+            window.scrollBy({
+                left: scrollAmount,
+                behavior: behavior
+            });
+        }
+
+        // Wait for scroll to complete
+        if (smooth) {
+            await this.wait(500);
+        } else {
+            await this.wait(100);
+        }
+
+        return {
+            scrolled: true,
+            direction: direction,
+            scrollTop: window.scrollY,
+            scrollLeft: window.scrollX
+        };
+    }
+
+    /**
+     * Execute type command (text input)
+     */
+    async executeType(command) {
+        const { target, text, element_id, selector, delay = 50 } = command;
+        let element = null;
+
+        if (target === 'element_id') {
+            element = this.findElementById(element_id);
+        } else if (target === 'selector') {
+            element = document.querySelector(selector);
+        }
+
+        if (!element || !['input', 'textarea'].includes(element.tagName.toLowerCase())) {
+            throw new Error('Target element is not an input field');
+        }
+
+        // Focus element
+        element.focus();
+        await this.wait(100);
+
+        // Clear existing text
+        element.value = '';
+        element.dispatchEvent(new Event('input', { bubbles: true }));
+
+        // Type text character by character
+        for (let i = 0; i < text.length; i++) {
+            const char = text[i];
+            element.value += char;
+
+            // Dispatch input event
+            element.dispatchEvent(new Event('input', { bubbles: true }));
+            element.dispatchEvent(new Event('change', { bubbles: true }));
+
+            if (delay > 0) {
+                await this.wait(delay);
+            }
+        }
+
+        // Trigger change event
+        element.blur();
+        element.dispatchEvent(new Event('change', { bubbles: true }));
+
+        return {
+            typed: true,
+            textLength: text.length,
+            element: element.tagName
+        };
+    }
+
+    /**
+     * Execute select command (dropdown)
+     */
+    async executeSelect(command) {
+        const { target, selector, value, label, element_id } = command;
+        let element = null;
+
+        if (target === 'element_id') {
+            element = this.findElementById(element_id);
+        } else if (target === 'selector') {
+            element = document.querySelector(selector);
+        }
+
+        if (!element || element.tagName.toLowerCase() !== 'select') {
+            throw new Error('Target element is not a select');
+        }
+
+        // Find option by value or label
+        let option = null;
+        if (value) {
+            option = Array.from(element.options).find(o => o.value === value);
+        } else if (label) {
+            option = Array.from(element.options).find(o => o.textContent === label);
+        }
+
+        if (!option) {
+            throw new Error(`Option not found: value=${value}, label=${label}`);
+        }
+
+        element.value = option.value;
+        element.dispatchEvent(new Event('change', { bubbles: true }));
+        await this.wait(200);
+
+        return {
+            selected: true,
+            value: element.value,
+            label: option.textContent
+        };
+    }
+
+    /**
+     * Execute submit command (form submission)
+     */
+    async executeSubmit(command) {
+        const { target, element_id, selector } = command;
+        let element = null;
+
+        if (target === 'element_id') {
+            element = this.findElementById(element_id);
+        } else if (target === 'selector') {
+            element = document.querySelector(selector);
+        } else if (target === 'form') {
+            // Find closest form
+            element = document.querySelector('form');
+        }
+
+        if (!element) {
+            throw new Error('Form element not found');
+        }
+
+        // Get the form
+        const form = element.tagName.toLowerCase() === 'form' 
+            ? element 
+            : element.closest('form');
+
+        if (!form) {
+            throw new Error('Element is not a form');
+        }
+
+        form.submit();
+        await this.wait(1000);
+
+        return {
+            submitted: true,
+            form: form.id || form.name || 'unnamed'
+        };
+    }
+
+    /**
+     * Execute focus command
+     */
+    async executeFocus(command) {
+        const { target, element_id, selector } = command;
+        let element = null;
+
+        if (target === 'element_id') {
+            element = this.findElementById(element_id);
+        } else if (target === 'selector') {
+            element = document.querySelector(selector);
+        }
+
+        if (!element) {
+            throw new Error('Element not found');
+        }
+
+        element.focus();
+        await this.wait(100);
+
+        return {
+            focused: true,
+            element: element.tagName
+        };
+    }
+
+    /**
+     * Execute hover command
+     */
+    async executeHover(command) {
+        const { target, element_id, selector, x, y } = command;
+        let element = null;
+
+        if (target === 'element_id') {
+            element = this.findElementById(element_id);
+        } else if (target === 'selector') {
+            element = document.querySelector(selector);
+        } else if (target === 'coordinates') {
+            element = document.elementFromPoint(x, y);
+        }
+
+        if (!element) {
+            throw new Error('Element not found');
+        }
+
+        const rect = element.getBoundingClientRect();
+        const hoverX = rect.left + rect.width / 2;
+        const hoverY = rect.top + rect.height / 2;
+
+        this.dispatchMouseEvent('mouseenter', hoverX, hoverY);
+        this.dispatchMouseEvent('mouseover', hoverX, hoverY);
+
+        await this.wait(300);
+
+        return {
+            hovered: true,
+            element: element.tagName
+        };
+    }
+
+    /**
+     * Execute wait command
+     */
+    async executeWait(command) {
+        const { duration, condition } = command;
+
+        if (duration) {
+            await this.wait(duration);
+            return { waited: true, duration: duration };
+        }
+
+        if (condition === 'page_load') {
+            await this.waitForPageLoad();
+            return { waited: true, condition: 'page_load' };
+        }
+
+        return { waited: false };
+    }
+
+    /**
+     * Execute screenshot command
+     */
+    async executeScreenshot(command) {
+        const processor = new VisionProcessor();
+        const result = await processor.processScreen();
+        
+        return {
+            screenshot: result ? result.screenshot : null,
+            success: result !== null
+        };
+    }
+
+    /**
+     * Execute extract data command
+     */
+    async executeExtractData(command) {
+        const { selector, attribute } = command;
+
+        if (selector) {
+            const element = document.querySelector(selector);
+            if (!element) {
+                throw new Error(`Element not found: ${selector}`);
+            }
+
+            if (attribute) {
+                return {
+                    data: element.getAttribute(attribute),
+                    type: 'attribute'
+                };
+            } else {
+                return {
+                    data: element.textContent,
+                    type: 'text'
+                };
+            }
+        }
+
+        // Extract all form data
+        const formData = {};
+        document.querySelectorAll('input, textarea, select').forEach((el) => {
+            if (el.name) {
+                formData[el.name] = el.value;
+            }
+        });
+
+        return {
+            data: formData,
+            type: 'form_data'
+        };
+    }
+
+    /**
+     * Helper: Find element by ID
+     */
+    findElementById(elementId) {
+        // Try to find by various methods
+        const parts = elementId.split('_');
+        if (parts[0] === 'el') {
+            const index = parseInt(parts[1]);
+            const allElements = document.querySelectorAll('*');
+            return allElements[index] || null;
+        }
+        
+        return document.getElementById(elementId);
+    }
+
+    /**
+     * Helper: Find element by XPath
+     */
+    findElementByXPath(xpath) {
+        const result = document.evaluate(
+            xpath,
+            document,
+            null,
+            XPathResult.FIRST_ORDERED_NODE_TYPE,
+            null
+        );
+        return result.singleNodeValue;
+    }
+
+    /**
+     * Helper: Dispatch mouse event
+     */
+    dispatchMouseEvent(eventType, x, y) {
+        const element = document.elementFromPoint(x, y);
+        if (element) {
+            const event = new MouseEvent(eventType, {
+                bubbles: true,
+                cancelable: true,
+                view: window,
+                clientX: x,
+                clientY: y
+            });
+            element.dispatchEvent(event);
+        }
+    }
+
+    /**
+     * Helper: Wait function
+     */
+    wait(ms) {
+        return new Promise(resolve => setTimeout(resolve, ms));
+    }
+
+    /**
+     * Helper: Wait for page load
+     */
+    waitForPageLoad() {
+        return new Promise((resolve) => {
+            if (document.readyState === 'complete') {
+                resolve();
+            } else {
+                window.addEventListener('load', resolve, { once: true });
+            }
+        });
+    }
+
+    /**
+     * Record execution in history
+     */
+    recordExecution(command, result, duration, success, error = null) {
+        this.executionHistory.push({
+            command: command.type,
+            timestamp: Date.now(),
+            duration: duration,
+            success: success,
+            error: error,
+            fullCommand: command
+        });
+
+        // Trim history
+        if (this.executionHistory.length > this.maxHistorySize) {
+            this.executionHistory = this.executionHistory.slice(-this.maxHistorySize);
+        }
+    }
+
+    /**
+     * Get execution history
+     */
+    getHistory() {
+        return this.executionHistory;
+    }
+
+    /**
+     * Clear execution history
+     */
+    clearHistory() {
+        this.executionHistory = [];
+    }
+}
+
+// Export for use
+if (typeof module !== 'undefined' && module.exports) {
+    module.exports = { CommandExecutor };
+}

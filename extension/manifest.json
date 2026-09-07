@@ -1,0 +1,54 @@
+{
+  "manifest_version": 3,
+  "name": "Privacy Browser Agent",
+  "version": "1.0.0",
+  "description": "Privacy-preserving browser agent for on-device visual perception with local vision processing.",
+  "permissions": [
+    "activeTab",
+    "scripting",
+    "storage",
+    "tabs",
+    "webRequest",
+    "offscreen"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Privacy Browser Agent"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": [
+        "libs/ort.all.min.js",
+        "utils.js",
+        "privacy-filter.js",
+        "vision-processor.js",
+        "command-executor.js",
+        "content.js"
+      ],
+      "css": ["styles.css"],
+      "run_at": "document_start"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "libs/*.js",
+        "libs/*.wasm",
+        "models/*"
+      ],
+      "matches": ["<all_urls>"]
+    }
+  ],
+  "icons": {
+    "16": "images/icon-16.png",
+    "48": "images/icon-48.png",
+    "128": "images/icon-128.png"
+  }
+}

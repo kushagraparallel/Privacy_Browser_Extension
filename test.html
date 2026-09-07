@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Privacy Agent Test Page</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            overflow: hidden;
+        }
+
+        header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 40px 20px;
+            text-align: center;
+        }
+
+        header h1 {
+            font-size: 28px;
+            margin-bottom: 10px;
+        }
+
+        header p {
+            opacity: 0.9;
+            font-size: 14px;
+        }
+
+        .content {
+            padding: 40px;
+        }
+
+        .section {
+            margin-bottom: 40px;
+        }
+
+        .section h2 {
+            color: #333;
+            margin-bottom: 20px;
+            font-size: 18px;
+            border-bottom: 2px solid #667eea;
+            padding-bottom: 10px;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            color: #333;
+            font-weight: 600;
+            font-size: 14px;
+        }
+
+        input[type="text"],
+        input[type="email"],
+        input[type="password"],
+        input[type="tel"],
+        input[type="number"],
+        select,
+        textarea {
+            width: 100%;
+            padding: 10px 12px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            font-size: 14px;
+            font-family: inherit;
+            transition: border-color 0.3s;
+        }
+
+        input[type="text"]:focus,
+        input[type="email"]:focus,
+        input[type="password"]:focus,
+        input[type="tel"]:focus,
+        input[type="number"]:focus,
+        select:focus,
+        textarea:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        .info-box {
+            background: #f0f4ff;
+            border-left: 4px solid #667eea;
+            padding: 15px;
+            margin-bottom: 20px;
+            border-radius: 4px;
+            font-size: 13px;
+            color: #333;
+        }
+
+        .sensitive-badge {
+            display: inline-block;
+            background: #ffebee;
+            color: #c62828;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 600;
+            margin-left: 8px;
+        }
+
+        button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 12px 24px;
+            border: none;
+            border-radius: 6px;
+            font-weight: 600;
+            cursor: pointer;
+            font-size: 14px;
+            transition: transform 0.2s;
+        }
+
+        button:hover {
+            transform: translateY(-2px);
+        }
+
+        .info-text {
+            color: #666;
+            font-size: 13px;
+            margin-top: 8px;
+        }
+
+        footer {
+            background: #f8f9fa;
+            padding: 20px;
+            text-align: center;
+            font-size: 12px;
+            color: #666;
+            border-top: 1px solid #ddd;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🔒 Privacy Agent Test Page</h1>
+            <p>Test the Privacy Browser Agent's detection and redaction capabilities</p>
+        </header>
+
+        <div class="content">
+            <div class="section">
+                <h2>Setup Instructions</h2>
+                <div class="info-box">
+                    <strong>How to use this page:</strong>
+                    <ul style="margin-top: 10px; margin-left: 20px;">
+                        <li>Fill in the form fields with sensitive data below</li>
+                        <li>Open the Privacy Agent popup from the extension icon</li>
+                        <li>Click "Process Now" to analyze this page</li>
+                        <li>View redaction statistics in the popup panel</li>
+                        <li>Sensitive data will be masked before server transmission</li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="section">
+                <h2>Authentication Form <span class="sensitive-badge">SENSITIVE</span></h2>
+                <form onsubmit="return false;">
+                    <div class="form-group">
+                        <label for="email">Email Address <span class="sensitive-badge">PII</span></label>
+                        <input type="email" id="email" name="email" placeholder="user@example.com" value="john.doe@example.com" />
+                        <div class="info-text">✓ Should be detected as email/PII</div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="password">Password <span class="sensitive-badge">CRITICAL</span></label>
+                        <input type="password" id="password" name="password" placeholder="Enter password" value="SecurePassword123!" />
+                        <div class="info-text">✓ Should be detected as password field</div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="phone">Phone Number <span class="sensitive-badge">PII</span></label>
+                        <input type="tel" id="phone" name="phone" placeholder="(555) 123-4567" value="(555) 123-4567" />
+                        <div class="info-text">✓ Should be detected as phone number</div>
+                    </div>
+
+                    <button type="submit">Sign In</button>
+                </form>
+            </div>
+
+            <div class="section">
+                <h2>Payment Information <span class="sensitive-badge">CRITICAL</span></h2>
+                <form onsubmit="return false;">
+                    <div class="form-group">
+                        <label for="cardNumber">Card Number <span class="sensitive-badge">PCI</span></label>
+                        <input type="text" id="cardNumber" placeholder="1234 5678 9012 3456" value="4532 1488 0343 6467" />
+                        <div class="info-text">✓ Should be detected and redacted</div>
+                    </div>
+
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                        <div class="form-group">
+                            <label for="expiry">Expiry <span class="sensitive-badge">PCI</span></label>
+                            <input type="text" id="expiry" placeholder="MM/YY" value="12/25" />
+                        </div>
+                        <div class="form-group">
+                            <label for="cvv">CVV <span class="sensitive-badge">CRITICAL</span></label>
+                            <input type="text" id="cvv" placeholder="123" value="472" />
+                        </div>
+                    </div>
+                </form>
+            </div>
+
+            <div class="section">
+                <h2>Personal Information <span class="sensitive-badge">SENSITIVE</span></h2>
+                <form onsubmit="return false;">
+                    <div class="form-group">
+                        <label for="ssn">Social Security Number <span class="sensitive-badge">CRITICAL</span></label>
+                        <input type="text" id="ssn" placeholder="123-45-6789" value="123-45-6789" />
+                        <div class="info-text">✓ Should be detected as SSN</div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="dob">Date of Birth <span class="sensitive-badge">PII</span></label>
+                        <input type="text" id="dob" placeholder="MM/DD/YYYY" value="01/15/1985" />
+                    </div>
+
+                    <div class="form-group">
+                        <label for="address">Address <span class="sensitive-badge">PII</span></label>
+                        <input type="text" id="address" placeholder="Street, City, State ZIP" value="123 Main Street, Springfield, IL 62701" />
+                    </div>
+                </form>
+            </div>
+
+            <div class="section">
+                <h2>Public Information</h2>
+                <div class="info-box">
+                    These fields should NOT be redacted by the privacy agent.
+                </div>
+                <form onsubmit="return false;">
+                    <div class="form-group">
+                        <label for="username">Username</label>
+                        <input type="text" id="username" placeholder="johndoe" value="johndoe" />
+                        <div class="info-text">✓ Should NOT be redacted</div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="company">Company</label>
+                        <input type="text" id="company" placeholder="Company Name" value="Acme Corporation" />
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <footer>
+            <p>Privacy Agent Test Environment v1.0 | For development and testing purposes</p>
+            <p style="margin-top: 10px; opacity: 0.7;">
+                ✓ Ensure the Privacy Browser Agent extension is installed and active
+            </p>
+        </footer>
+    </div>
+</body>
+</html>

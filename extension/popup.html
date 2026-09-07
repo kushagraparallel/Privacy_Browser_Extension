@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Privacy Browser Agent</title>
+    <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🔒 Privacy Agent</h1>
+            <p class="version">v1.0.0</p>
+        </header>
+
+        <section class="control-panel">
+            <div class="controls">
+                <button id="startBtn" class="btn btn-primary">Start Monitoring</button>
+                <button id="stopBtn" class="btn btn-secondary" disabled>Stop Monitoring</button>
+                <button id="processBtn" class="btn btn-info">Process Now</button>
+            </div>
+        </section>
+
+        <section class="status-panel">
+            <h2>Status</h2>
+            <div class="status-item">
+                <label>Agent Status:</label>
+                <span id="statusLabel" class="status-inactive">Inactive</span>
+            </div>
+            <div class="status-item">
+                <label>Session ID:</label>
+                <span id="sessionId" class="mono">-</span>
+            </div>
+            <div class="status-item">
+                <label>Server Connection:</label>
+                <span id="serverStatus" class="status-disconnected">Disconnected</span>
+            </div>
+        </section>
+
+        <section class="privacy-stats">
+            <h2>Privacy Analytics</h2>
+            <div class="stat-row">
+                <div class="stat-box">
+                    <span class="stat-label">Sensitive Elements</span>
+                    <span id="sensitiveCount" class="stat-value">0</span>
+                </div>
+                <div class="stat-box">
+                    <span class="stat-label">Redacted</span>
+                    <span id="redactedCount" class="stat-value">0</span>
+                </div>
+                <div class="stat-box">
+                    <span class="stat-label">Processing</span>
+                    <span id="processingTime" class="stat-value">0ms</span>
+                </div>
+            </div>
+        </section>
+
+        <section class="config-section">
+            <h2>Settings</h2>
+            <div class="config-item">
+                <label for="serverUrl">Server URL:</label>
+                <input type="text" id="serverUrl" placeholder="http://localhost:8000" />
+            </div>
+            <div class="config-item">
+                <label>
+                    <input type="checkbox" id="enableRedaction" checked />
+                    Enable Privacy Filter
+                </label>
+            </div>
+            <div class="config-item">
+                <label for="redactionMode">Redaction Mode:</label>
+                <select id="redactionMode">
+                    <option value="blur">Blur</option>
+                    <option value="black">Black Box</option>
+                    <option value="semantic">Semantic</option>
+                </select>
+            </div>
+            <button id="saveConfig" class="btn btn-success">Save Settings</button>
+        </section>
+
+        <section class="log-section">
+            <h2>Activity Log</h2>
+            <div id="logContainer" class="log-container"></div>
+            <button id="clearLogs" class="btn btn-small">Clear</button>
+        </section>
+
+        <footer>
+            <a href="#" id="settingsLink">Advanced Settings</a>
+            <a href="#" id="helpLink">Help & Documentation</a>
+        </footer>
+    </div>
+
+    <script src="utils.js"></script>
+    <script src="popup.js"></script>
+</body>
+</html>
