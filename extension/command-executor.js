@@ -7,6 +7,81 @@ class CommandExecutor {
     constructor() {
         this.executionHistory = [];
         this.maxHistorySize = 100;
+        this.elementRegistry = null;
+    }
+
+    /** Execute one validated action from the agent session. */
+    async executeAgentAction(action) {
+        const startedAt = performance.now();
+        const type = String(action.type || '').toLowerCase();
+
+        try {
+            if (!this.elementRegistry && type !== 'scroll' && type !== 'wait') {
+                throw new Error('Agent element registry is not configured');
+            }
+
+            const element = action.element_id
+                ? this.elementRegistry.resolveElement(action.element_id)
+                : null;
+            if (action.element_id && !element) {
+                return { success: false, errorCode: 'element_not_found', errorMessage: `Element ${action.element_id} not found` };
+            }
+            if (element) {
+                const validation = this.elementRegistry.validateReference(action.element_id, element);
+                if (!validation.valid) {
+                    return { success: false, errorCode: 'stale_element_reference', errorMessage: validation.reason };
+                }
+            }
+
+            let result;
+            switch (type) {
+                case 'click': result = await this.executeClick({ ...action, target: 'element_id' }); break;
+                case 'type': result = await this.executeType({ ...action, target: 'element_id' }); break;
+                case 'clear': result = await this.executeType({ ...action, target: 'element_id', text: '' }); break;
+                case 'focus': result = await this.executeFocus({ ...action, target: 'element_id' }); break;
+                case 'select': result = await this.executeSelect({ ...action, target: 'element_id' }); break;
+                case 'hover': result = await this.executeHover({ ...action, target: 'element_id' }); break;
+                case 'scroll': result = await this.executeScroll(action); break;
+                case 'wait': result = await this.executeWait({ duration: action.duration_ms || 500 }); break;
+                case 'press_key': result = await this.executePressKey(element, action.key); break;
+                case 'submit': result = await this.executeSubmit({ ...action, target: 'element_id' }); break;
+                case 'navigate': result = await this.executeNavigate(action.url); break;
+                case 'back': result = await this.executeHistory('back'); break;
+                case 'forward': result = await this.executeHistory('forward'); break;
+                case 'extract': result = await this.executeExtractData(action); break;
+                default: return { success: false, errorCode: 'invalid_action', errorMessage: `Unsupported action: ${action.type}` };
+            }
+
+            const durationMs = Math.round(performance.now() - startedAt);
+            this.recordExecution(action, result, durationMs, true);
+            return { success: true, result, duration_ms: durationMs };
+        } catch (error) {
+            const durationMs = Math.round(performance.now() - startedAt);
+            this.recordExecution(action, null, durationMs, false, error.message);
+            return { success: false, errorCode: 'execution_error', errorMessage: error.message, duration_ms: durationMs };
+        }
+    }
+
+    async executePressKey(element, key) {
+        if (!element) throw new Error('Target element not found');
+        element.focus();
+        element.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }));
+        element.dispatchEvent(new KeyboardEvent('keyup', { key, bubbles: true, cancelable: true }));
+        return { pressed: true, key };
+    }
+
+    async executeNavigate(url) {
+        if (!url) throw new Error('Navigation URL is required');
+        window.location.assign(url);
+        await this.wait(500);
+        return { navigated: true, url };
+    }
+
+    async executeHistory(direction) {
+        if (direction === 'back') window.history.back();
+        else window.history.forward();
+        await this.wait(500);
+        return { navigated: true, direction };
     }
 
     /**
@@ -435,6 +510,9 @@ class CommandExecutor {
      * Helper: Find element by ID
      */
     findElementById(elementId) {
+        if (this.elementRegistry && elementId?.startsWith('agent-el-')) {
+            return this.elementRegistry.resolveElement(elementId);
+        }
         // Try to find by various methods
         const parts = elementId.split('_');
         if (parts[0] === 'el') {

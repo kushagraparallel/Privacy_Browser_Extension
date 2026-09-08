@@ -39,6 +39,7 @@ class AgentLoopOrchestrator {
             
             // Create server session
             const sessionId = await this.sessionManager.startSession(userGoal);
+            this.commandExecutor.elementRegistry = this.sessionManager.elementRegistry;
             this.currentSessionId = sessionId;
             this.stepCount = 0;
             this.errorCount = 0;
@@ -96,7 +97,7 @@ class AgentLoopOrchestrator {
                 });
                 
                 // Check for completion
-                if (action.type === 'FINISH') {
+                if (String(action.type).toLowerCase() === 'finish') {
                     Logger.log('LOOP', `Agent finished: ${action.reason}`);
                     this.notifyPopup({
                         type: 'agent_finished',
@@ -197,7 +198,7 @@ class AgentLoopOrchestrator {
             if (!action.type) {
                 return {
                     success: false,
-                    errorCode: 'INVALID_ACTION',
+                    errorCode: 'invalid_action',
                     errorMessage: 'Action type is missing'
                 };
             }
@@ -210,7 +211,7 @@ class AgentLoopOrchestrator {
             if (!result) {
                 return {
                     success: false,
-                    errorCode: 'EXECUTION_FAILED',
+                    errorCode: 'execution_error',
                     errorMessage: 'Command executor returned null',
                     duration_ms: Math.round(duration)
                 };
@@ -228,7 +229,7 @@ class AgentLoopOrchestrator {
             
             return {
                 success: false,
-                errorCode: 'EXECUTION_ERROR',
+                errorCode: 'execution_error',
                 errorMessage: error.message,
                 duration_ms: Math.round(duration)
             };

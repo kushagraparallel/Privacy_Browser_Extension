@@ -16,7 +16,7 @@
 class ElementRegistry {
     constructor() {
         // Map: agent-el-XXX → Element
-        this.elementMap = new WeakMap();
+        this.elementMap = new Map();
         
         // Map: agent-el-XXX → ElementFingerprint
         this.fingerprints = new Map();
@@ -42,6 +42,9 @@ class ElementRegistry {
         // Check if already registered
         const existingId = this.findRegisteredId(element);
         if (existingId) {
+            if (!this.fingerprints.has(existingId)) {
+                this.fingerprints.set(existingId, this.createFingerprint(element));
+            }
             return existingId;
         }
         
@@ -107,20 +110,15 @@ class ElementRegistry {
      * Find if element already has an ID
      */
     findRegisteredId(element) {
-        // This is imperfect since WeakMap doesn't allow iteration
-        // But we maintain consistency through our registration process
-        return null;
+        return this.elementMap.get(element) || null;
     }
     
     /**
      * Resolve agent-el-XXX to actual DOM element
      */
     resolveElement(agentId) {
-        // Get from weak map if exists
-        for (let [elem, id] of this.elementMap.entries()) {
-            if (id === agentId) {
-                return elem;
-            }
+        for (const [element, id] of this.elementMap.entries()) {
+            if (id === agentId) return element;
         }
         return null;
     }
@@ -215,10 +213,9 @@ class ElementRegistry {
      */
     rebuild() {
         this.invalidateGeneration();
-        this.elementCounter = 0;
         
         // Re-register all interactive elements
-        const interactiveElements = extractPageStructure();
+        const interactiveElements = extractInteractiveDomElements();
         let registered = 0;
         
         for (const elem of interactiveElements) {
@@ -339,7 +336,7 @@ class ClientSessionManager {
         const rect = document.documentElement.getBoundingClientRect();
         
         // Get all interactive elements
-        const allElements = extractPageStructure();
+        const allElements = extractInteractiveDomElements();
         const elements = [];
         
         for (const elem of allElements) {
@@ -353,8 +350,8 @@ class ClientSessionManager {
                 agent_element_id: agentId,
                 tag: elem.tagName.toLowerCase(),
                 role: elem.getAttribute('role'),
-                type: elem.getAttribute('type'),
-                text: sensitiveType ? '[REDACTED]' : (elem.textContent?.substring(0, 100) || ''),
+                element_type: elem.getAttribute('type'),
+                text_preview: sensitiveType ? '[REDACTED]' : (elem.textContent?.substring(0, 100) || ''),
                 placeholder: elem.getAttribute('placeholder'),
                 aria_label: elem.getAttribute('aria-label'),
                 visible: elem.offsetParent !== null,

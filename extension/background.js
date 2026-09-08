@@ -175,4 +175,3 @@ setInterval(() => {
 }, 5 * 60 * 1000); // Check every 5 minutes
 
 Logger.log('BG', 'Background service worker started');
-);

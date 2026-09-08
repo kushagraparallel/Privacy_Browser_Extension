@@ -55,6 +55,11 @@ class Config {
         });
     }
 
+    static async getServerUrl() {
+        const config = await this.load();
+        return (config.SERVER_URL || this.DEFAULT.SERVER_URL).replace(/\/$/, '');
+    }
+
     static async save(config) {
         return new Promise((resolve) => {
             chrome.storage.sync.set(config, resolve);
@@ -176,6 +181,30 @@ function extractPageStructure() {
         } catch (e) {
             Logger.warn('EXTRACT', `Invalid selector: ${selector}`);
         }
+    });
+
+    return elements;
+}
+
+/**
+ * Extract the actual DOM nodes used by the agent registry.
+ */
+function extractInteractiveDomElements() {
+    const selectors = [
+        'button', 'a', 'input', 'textarea', 'select',
+        '[role="button"]', '[role="link"]', '[role="menuitem"]',
+        '[onclick]', '[data-clickable]'
+    ];
+    const elements = [];
+    const seen = new Set();
+
+    selectors.forEach((selector) => {
+        document.querySelectorAll(selector).forEach((element) => {
+            if (!seen.has(element)) {
+                seen.add(element);
+                elements.push(element);
+            }
+        });
     });
 
     return elements;

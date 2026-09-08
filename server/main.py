@@ -26,8 +26,9 @@ from enum import Enum
 from fastapi import FastAPI, HTTPException, File, UploadFile, BackgroundTasks
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field
 from dotenv import load_dotenv
+from pydantic import field_validator
 
 # Image processing
 from PIL import Image
@@ -85,6 +86,19 @@ class ActionType(str, Enum):
     FORWARD = "forward"
     EXTRACT = "extract"
     FINISH = "finish"
+    @field_validator("type", mode="before")
+    def normalize_action_type(cls, value):
+        if isinstance(value, str):
+            value = value.strip().lower()
+
+            try:
+                return ActionType(value)
+            except ValueError:
+                raise ValueError(
+                    f"Invalid action type: {value}"
+                )
+
+        return value
 
 
 class SessionStatus(str, Enum):
@@ -110,6 +124,7 @@ class ErrorCode(str, Enum):
     SESSION_NOT_FOUND = "session_not_found"
     MAX_STEPS_EXCEEDED = "max_steps_exceeded"
     NAVIGATION_DETECTED = "navigation_detected"
+    EXECUTION_ERROR = "execution_error"
 
 
 # ============================================================================
@@ -177,11 +192,11 @@ class Action(BaseModel):
     class Config:
         use_enum_values = True
     
-    @validator('type')
+    @field_validator('type')
     def validate_type(cls, v):
         if isinstance(v, str):
             try:
-                return ActionType(v)
+                return ActionType(v.lower())
             except ValueError:
                 raise ValueError(f"Invalid action type: {v}")
         return v
@@ -251,6 +266,7 @@ class AgentSession:
         self.current_observation = observation
         self.page_revision += 1
         self.last_activity = datetime.utcnow()
+        print("Observations: ", observation.elements)
         logger.info(f"[{self.session_id}] Observation recorded: {len(observation.elements)} elements")
     
     def add_action(self, action: Action):
@@ -350,20 +366,20 @@ CRITICAL RULES:
 9. Always verify your observations before acting.
 
 SUPPORTED ACTION TYPES:
-- CLICK: Click on an element
-- TYPE: Type text into a focused input (never passwords from server)
-- CLEAR: Clear an input field
-- FOCUS: Focus an element
-- SELECT: Select option in dropdown (provide text or value)
-- SCROLL: Scroll page (direction: up/down/left/right, amount in pixels)
-- PRESS_KEY: Press keyboard key (Enter, Tab, Escape, etc.)
-- HOVER: Hover over element
-- WAIT: Wait for page to settle (duration_ms)
-- NAVIGATE: Navigate to URL
-- BACK: Browser back button
-- FORWARD: Browser forward button
-- EXTRACT: Extract data from page (text, HTML, etc.)
-- FINISH: Task complete
+- click: Click on an element
+- type: Type text into a focused input (never passwords from server)
+- clear: Clear an input field
+- focus: Focus an element
+- select: Select option in dropdown (provide text or value)
+- scroll: Scroll page (direction: up/down/left/right, amount in pixels)
+- press_key: Press keyboard key (Enter, Tab, Escape, etc.)
+- hover: Hover over element
+- wait: Wait for page to settle (duration_ms)
+- navigate: Navigate to URL
+- back: Browser back button
+- forward: Browser forward button
+- extract: Extract data from page (text, HTML, etc.)
+- finish: Task complete
 
 Always respond with valid JSON matching this format:
 {
@@ -586,7 +602,13 @@ app = FastAPI(
 # Configure CORS carefully
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=CORS_ORIGINS,
+    allow_origins=[
+        "http://localhost:5500",
+        "http://127.0.0.1:5500",
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+    ],
+    allow_origin_regex=r"^chrome-extension://.*$",
     allow_credentials=False,
     allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["Content-Type", "Authorization"],

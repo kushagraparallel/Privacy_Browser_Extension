@@ -34,7 +34,6 @@ class PrivacyBrowserAgent {
 
             // Load configuration
             this.config = await Config.load();
-            this.config.SERVER_URL = "http://localhost:8000"; // Replace 8000 with your local port
             console.log(
                 'LOADED CONFIG:',
                 JSON.stringify(this.config, null, 2)
@@ -507,6 +506,40 @@ class PrivacyBrowserAgent {
 
                             })();
 
+                            return true;
+
+                        case 'start_agent_session':
+                            (async () => {
+                                try {
+                                    const initializedAgent = await initializeAgent();
+                                    if (!initializedAgent || !globalAgentLoop) {
+                                        sendResponse({ success: false, error: 'Agent loop is not available' });
+                                        return;
+                                    }
+                                    const started = await globalAgentLoop.start(
+                                        request.goal,
+                                        request.serverUrl || this.config?.SERVER_URL || 'http://localhost:8000'
+                                    );
+                                    sendResponse({
+                                        success: started,
+                                        session_id: globalAgentLoop.currentSessionId,
+                                        error: started ? undefined : 'Failed to start agent session'
+                                    });
+                                } catch (error) {
+                                    sendResponse({ success: false, error: error.message });
+                                }
+                            })();
+                            return true;
+
+                        case 'stop_agent_session':
+                            (async () => {
+                                try {
+                                    if (globalAgentLoop) await globalAgentLoop.stop();
+                                    sendResponse({ success: true });
+                                } catch (error) {
+                                    sendResponse({ success: false, error: error.message });
+                                }
+                            })();
                             return true;
                         // ==================================================
                         // STOP PROCESSING
